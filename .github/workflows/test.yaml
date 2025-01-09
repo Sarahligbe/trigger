@@ -92,5 +92,5 @@ jobs:
       needs: trigger-cypress-tests
       steps:
         - name: build
-           run: |
-               echo "cypress was a success"
+          run: |
+            echo "cypress was a success"
