@@ -10,12 +10,12 @@ jobs:
       steps:
         - name: Trigger Cypress Tests
           run: |
-            curl -X POST \
+            response=$(curl -X POST \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{"event_type": "run-cypress-tests", "client_payload": { "pr_number": "${{ github.event.pull_request.number }}", "branch": "${{ github.head_ref }}", "unique_id": "PR-${{ github.event.pull_request.number }}-$(date +%s)" }}' \
-              https://api.github.com/repos/sarahligbe/kubernetes-cluster/dispatches
+              https://api.github.com/repos/sarahligbe/kubernetes-cluster/dispatches)
             
             # Extract workflow_run_id from the response
             workflow_run_id=$(echo "$response" | jq -r '.id')
