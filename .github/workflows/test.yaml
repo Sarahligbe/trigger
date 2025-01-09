@@ -26,7 +26,7 @@ jobs:
             check_interval_seconds=120
             max_wait_minutes=30
 
-            unique_id="${{ github.event.pull_request.number }}-unq"  
+            unique_id="PR-${{ github.event.pull_request.number }}-$(date +%s)"  
 
             while true; do
               # Fetch workflow runs for the branch and event type
