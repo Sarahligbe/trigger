@@ -16,6 +16,13 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{"event_type": "run-cypress-tests", "client_payload": { "pr_number": "${{ github.event.pull_request.number }}", "branch": "${{ github.head_ref }}", "unique_id": "PR-${{ github.event.pull_request.number }}-$(date +%s)" }}' \
               https://api.github.com/repos/sarahligbe/kubernetes-cluster/dispatches
+            
+            # Extract workflow_run_id from the response
+            workflow_run_id=$(echo "$response" | jq -r '.id')
+            echo "Triggered workflow run ID: $workflow_run_id"
+
+            # Save the workflow run ID as an environment variable for later use
+            echo "WORKFLOW_RUN_ID=$workflow_run_id" >> $GITHUB_ENV
 
         - name: Wait for status
           run: |
