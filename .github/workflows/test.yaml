@@ -14,5 +14,83 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
               -H "Content-Type: application/json" \
-              -d '{"event_type": "run-cypress-tests", "client_payload": { "pr_number": "${{ github.event.pull_request.number }}", "branch": "${{ github.head_ref }}" }}' \
+              -d '{"event_type": "run-cypress-tests", "client_payload": { "pr_number": "${{ github.event.pull_request.number }}", "branch": "${{ github.head_ref }}", "unique_id": "${{ github.event.pull_request.number }}-unq" }}' \
               https://api.github.com/repos/sarahligbe/kubernetes-cluster/dispatches
+
+        - name: Wait for status
+          run: |
+            # Initialize variables
+            sudo apt-get update
+            sudo apt-get install jq
+            elapsed_time=0
+            check_interval_seconds=120
+            max_wait_minutes=30
+
+            unique_id="${{ github.event.pull_request.number }}-unq"  
+
+            while true; do
+              # Fetch workflow runs for the branch and event type
+              response=$(curl -s -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
+                "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/runs?event=repository_dispatch")
+
+              # Check if response contains workflow runs
+              run_count=$(echo "$response" | jq -r '.total_count')
+              if [ "$run_count" -eq 0 ]; then
+                echo "No workflow runs found. Retrying..."
+                sleep $check_interval_seconds
+                elapsed_time=$((elapsed_time + check_interval_seconds))
+                continue
+              fi
+
+              # Find the workflow run matching the unique_id
+              matching_run=$(echo "$response" | jq -r \
+                --arg unique_id "$unique_id" \
+                '.workflow_runs[] | select(.head_commit.message | contains($unique_id)) | .')
+
+              # Check if a matching workflow run is found
+              if [ -z "$matching_run" ]; then
+                echo "No matching workflow run found with unique ID $unique_id. Retrying..."
+                sleep $check_interval_seconds
+                elapsed_time=$((elapsed_time + check_interval_seconds))
+                continue
+              fi
+
+              # Parse the status and conclusion of the matching run
+              status=$(echo "$matching_run" | jq -r '.status')
+              conclusion=$(echo "$matching_run" | jq -r '.conclusion')
+
+              # Log the status and conclusion
+              echo "Matching workflow status: $status, conclusion: $conclusion"
+
+              # Check if the workflow has completed
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "Triggered workflow completed successfully. Proceeding with the next job."
+                  break
+                else
+                  echo "Triggered workflow failed with conclusion: $conclusion."
+                  exit 1
+                fi
+              fi
+
+              # Check if the timeout has been reached
+              if [ "$elapsed_time" -ge "$((max_wait_minutes * 60))" ]; then
+                echo "Timeout reached after $max_wait_minutes minutes. Failing pipeline."
+                exit 1
+              fi
+
+              # Wait for the next check
+              echo "Workflow still in progress, checking again in $((check_interval_seconds / 60)) minutes..."
+              sleep $check_interval_seconds
+              elapsed_time=$((elapsed_time + check_interval_seconds))
+            done
+
+  build:
+      name: "build"
+      runs-on: ubuntu-latest
+      needs: trigger-cypress-tests
+      steps:
+        - name: build
+           run: |
+               echo "cypress was a success"
