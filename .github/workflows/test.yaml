@@ -27,8 +27,6 @@ jobs:
         - name: Wait for status
           run: |
             # Initialize variables
-            sudo apt-get update
-            sudo apt-get install jq
             elapsed_time=0
             check_interval_seconds=120
             max_wait_minutes=30
