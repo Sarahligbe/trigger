@@ -28,10 +28,10 @@ jobs:
             check_interval_seconds=120
             max_wait_minutes=30
             unique_id="${{ steps.generate-id.outputs.unique_id }}"
-            matching_job_id=""
+            matching_run_id=""
 
             while true; do
-              if [ -z "$matching_job_id" ]; then
+              if [ -z "$matching_run_id" ]; then
                 # Fetch all workflow runs for the repository_dispatch event
                 response=$(curl -s -H "Accept: application/vnd.github+json" \
                   -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
@@ -59,31 +59,31 @@ jobs:
                     '.jobs[] | select(.steps[].name | contains($unique_id))')
 
                   if [ -n "$matching_job" ]; then
-                    matching_job_id=$(echo "$matching_job" | jq -r '.id')
+                    matching_run_id=$(echo "$matching_job" | jq -r '.run_id')
 
-                    echo "Found matching job with ID: $matching_job_id"
+                    echo "Found matching job with ID: $matching_run_id"
                     break
                   fi
                 done
               fi
 
               # If a matching job ID is found, check its status and conclusion
-              if [ -n "$matching_job_id" ]; then
-                job_response=$(curl -s -H "Accept: application/vnd.github+json" \
+              if [ -n "$matching_run_id" ]; then
+                run_response=$(curl -s -H "Accept: application/vnd.github+json" \
                   -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
-                  "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/jobs/$matching_job_id")
+                  "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/runs/$matching_run_id")
 
-                job_status=$(echo "$job_response" | jq -r '.status')
-                job_conclusion=$(echo "$job_response" | jq -r '.conclusion')
+                run_status=$(echo "$run_response" | jq -r '.status')
+                run_conclusion=$(echo "$run_response" | jq -r '.conclusion')
 
-                echo "Job Status: $job_status, Conclusion: $job_conclusion"
+                echo "run Status: $run_status, Conclusion: $run_conclusion"
 
-                if [ "$job_status" = "completed" ]; then
-                  if [ "$job_conclusion" = "success" ]; then
+                if [ "$run_status" = "completed" ]; then
+                  if [ "$run_conclusion" = "success" ]; then
                     echo "Cypress tests completed successfully."
                     exit 0
                   else
-                    echo "Cypress tests failed with conclusion: $job_conclusion."
+                    echo "Cypress tests failed with conclusion: $run_conclusion."
                     exit 1
                   fi
                 fi
