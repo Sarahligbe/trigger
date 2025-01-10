@@ -59,9 +59,9 @@ jobs:
                     '.jobs[] | select(.steps[].name | contains($unique_id))')
 
                   if [ -n "$matching_job" ]; then
-                    matching_run_id=$(echo "$matching_job" | jq -r '.run_id')
+                    matching_run_id=$run_id
 
-                    echo "Found matching job with ID: $matching_run_id"
+                    echo "Found matching run with ID: $matching_run_id"
                     break
                   fi
                 done
