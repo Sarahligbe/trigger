@@ -28,42 +28,53 @@ jobs:
             check_interval_seconds=120
             max_wait_minutes=30
             unique_id="${{ steps.generate-id.outputs.unique_id }}"
+            matching_job_id=""
 
             while true; do
-            # Fetch all workflow runs for the repository_dispatch event
-            response=$(curl -s -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
-              "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/runs?event=repository_dispatch")
+              if [ -z "$matching_job_id" ]; then
+                # Fetch all workflow runs for the repository_dispatch event
+                response=$(curl -s -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
+                  "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/runs?event=repository_dispatch")
 
-            # Extract run IDs
-            run_ids=$(echo "$response" | jq -r '.workflow_runs[] | .id')
+                # Extract run IDs
+                run_ids=$(echo "$response" | jq -r '.workflow_runs[] | .id')
 
-            if [ -z "$run_ids" ]; then
-              echo "No workflow runs found. Retrying..."
-              sleep $check_interval_seconds
-              elapsed_time=$((elapsed_time + check_interval_seconds))
-              continue
-            fi
+                if [ -z "$run_ids" ]; then
+                  echo "No workflow runs found. Retrying..."
+                  sleep $check_interval_seconds
+                  elapsed_time=$((elapsed_time + check_interval_seconds))
+                  continue
+                fi
 
-            # Loop through run IDs to fetch jobs
-            for run_id in $run_ids; do
-              jobs_response=$(curl -s -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
-                "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/runs/$run_id/jobs")
+                # Loop through run IDs to fetch jobs
+                for run_id in $run_ids; do
+                  jobs_response=$(curl -s -H "Accept: application/vnd.github+json" \
+                    -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
+                    "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/runs/$run_id/jobs")
 
-              # Check if any step name in the jobs contains the unique ID
-              matching_job=$(echo "$jobs_response" | jq -r \
-                --arg unique_id "$unique_id" \
-                '.jobs[] | select(.steps[].name | contains($unique_id))')
+                  # Check if any step name in the jobs contains the unique ID
+                  matching_job=$(echo "$jobs_response" | jq -r \
+                    --arg unique_id "$unique_id" \
+                    '.jobs[] | select(.steps[].name | contains($unique_id))')
 
-              if [ -n "$matching_job" ]; then
-                job_id=$(echo "$matching_job" | jq -r '.id')
+                  if [ -n "$matching_job" ]; then
+                    matching_job_id=$(echo "$matching_job" | jq -r '.id')
 
-                echo "Found matching job with ID: $job_id"
+                    echo "Found matching job with ID: $matching_job_id"
+                    break
+                  fi
+                done
+              fi
 
-                # Check the status and conclusion of the matching job
-                job_status=$(echo "$matching_job" | jq -r '.status')
-                job_conclusion=$(echo "$matching_job" | jq -r '.conclusion')
+              # If a matching job ID is found, check its status and conclusion
+              if [ -n "$matching_job_id" ]; then
+                job_response=$(curl -s -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${{ secrets.CYPRESS_TRIGGER_TOKEN }}" \
+                  "https://api.github.com/repos/sarahligbe/kubernetes-cluster/actions/jobs/$matching_job_id")
+
+                job_status=$(echo "$job_response" | jq -r '.status')
+                job_conclusion=$(echo "$job_response" | jq -r '.conclusion')
 
                 echo "Job Status: $job_status, Conclusion: $job_conclusion"
 
@@ -77,7 +88,6 @@ jobs:
                   fi
                 fi
               fi
-            done
 
             if [ "$elapsed_time" -ge "$((max_wait_minutes * 60))" ]; then
               echo "Timeout reached after $max_wait_minutes minutes."
